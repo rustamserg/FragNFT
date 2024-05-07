@@ -79,11 +79,37 @@ contract NFTMarketplace is ReentrancyGuard {
  
   // Buy an NFT
   function buyNFT(address _nftContract, uint256 _tokenId) public payable nonReentrant  {
-    // code
+    Token storage nft = _idToToken[_tokenId];
+    require(msg.value >= nft.price, "Not enough ether to cover token price");
+
+    address owner = IERC721(_nftContract).ownerOf(_tokenId);
+    address buyer = payable(msg.sender);
+    
+    payable(nft.seller).transfer(msg.value);
+    
+    IERC721(_nftContract).setApprovalForAll(buyer, true);
+    IERC721(_nftContract).approve(buyer, nft.tokenId);
+    IERC721(_nftContract).transferFrom(owner, buyer, nft.tokenId);
+
+    _marketOwner.transfer(LISTING_FEE);
+    nft.owner = payable(buyer);
+    nft.isListed = false;
+
+    _nftsSold.increment();
+    emit NFTSold(_nftContract, nft.tokenId, nft.seller, buyer, msg.value);
   }
  
   // Resell an NFT purchased from the marketplace
   function resellNFT(address _nftContract, uint256 _tokenId) public payable nonReentrant {
-    // code
+    address owner = IERC721(_nftContract).ownerOf(_tokenId);
+    Token storage nft = _idToToken[_tokenId];
+
+    IERC721(_nftContract).transferFrom(owner, address(this), _tokenId);
+    nft.seller = payable(msg.sender);
+    nft.owner = payable(address(this));
+    nft.isListed = true;
+
+    _nftsSold.decrement();
+    emit NFTListed(_nftContract, _tokenId, msg.sender, address(this), LISTING_FEE);
   }
 }
